@@ -1,6 +1,6 @@
 <# :
 @echo off
-title Alpme Forensic Auditor v3.1 (Surgical Edition)
+title Alpme Forensic Auditor (Universal Edition)
 color 0B
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((Get-Content -Raw '%~f0') -replace '(?s)^<#.*?#>\r?\n','')"
 pause
@@ -9,22 +9,39 @@ exit /b
 
 Clear-Host
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "       ALPME EXTENSION FORENSIC AUDITOR v3.1            " -ForegroundColor Cyan
+Write-Host "    ALPME EXTENSION FORENSIC AUDITOR (UNIVERSAL)        " -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
-$dbPaths = @(
+# 1. Dynamic Auto-Discovery of all VS Code Forks (Antigravity, Cursor, Windsurf, VSCodium, Code)
+Write-Host "[*] Auto-discovering installed IDE databases in AppData..." -ForegroundColor Gray
+
+$dbPaths = Get-ChildItem -Path $env:APPDATA -Filter "state.vscdb" -Recurse -Depth 4 -ErrorAction SilentlyContinue | 
+           Where-Object { $_.FullName -like "*\globalStorage\state.vscdb" } | 
+           Select-Object -ExpandProperty FullName
+
+# Fallback check for common paths if depth scan misses anything
+$fallbackPaths = @(
     "$env:APPDATA\Code\User\globalStorage\state.vscdb",
-    "$env:APPDATA\Code - Insiders\User\globalStorage\state.vscdb",
-    "$env:APPDATA\VSCodium\User\globalStorage\state.vscdb"
+    "$env:APPDATA\Antigravity\User\globalStorage\state.vscdb",
+    "$env:APPDATA\Cursor\User\globalStorage\state.vscdb",
+    "$env:APPDATA\Windsurf\User\globalStorage\state.vscdb",
+    "$env:APPDATA\VSCodium\User\globalStorage\state.vscdb",
+    "$env:APPDATA\Code - Insiders\User\globalStorage\state.vscdb"
 )
+foreach ($fb in $fallbackPaths) {
+    if ((Test-Path $fb) -and ($dbPaths -notcontains $fb)) {
+        $dbPaths += $fb
+    }
+}
 
 $discoveredPayloads = [System.Collections.Generic.HashSet[string]]::new()
 $discoveredHashes   = [System.Collections.Generic.HashSet[string]]::new()
 
-# 1. Multi-Record Database Scanner (Anchored to Alpme Context)
-Write-Host "[*] Auditing VS Code SQLite Databases..." -ForegroundColor Gray
+# Audit Discovered Databases
 foreach ($db in $dbPaths) {
     if (Test-Path $db) {
+        Write-Host "  [+] Auditing IDE Database: " -NoNewline -ForegroundColor Gray
+        Write-Host $db -ForegroundColor White
         try {
             $fs = [System.IO.File]::Open($db, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
             $ms = New-Object System.IO.MemoryStream
@@ -49,14 +66,14 @@ foreach ($db in $dbPaths) {
                 }
             }
         } catch {
-            Write-Host "[-] Could not access $db" -ForegroundColor DarkGray
+            Write-Host "      [-] Database locked or inaccessible." -ForegroundColor DarkGray
         }
     }
 }
 
 # Display Database Results
 if ($discoveredPayloads.Count -gt 0 -or $discoveredHashes.Count -gt 0) {
-    Write-Host "`n[!] INFECTION EVIDENCE FOUND IN VS CODE DATABASE!" -ForegroundColor Red
+    Write-Host "`n[!] INFECTION EVIDENCE FOUND IN IDE DATABASE!" -ForegroundColor Red
     
     if ($discoveredPayloads.Count -gt 0) {
         Write-Host "  [-] Recorded Payload Paths:" -ForegroundColor Yellow
@@ -79,7 +96,7 @@ if ($discoveredPayloads.Count -gt 0 -or $discoveredHashes.Count -gt 0) {
         }
     }
 } else {
-    Write-Host "[+] Database Clean: No Alpme dropper records found." -ForegroundColor Green
+    Write-Host "[+] All IDE Databases Clean: No Alpme dropper records found." -ForegroundColor Green
 }
 
 # 2. Universal Memory Hunter (Defensive Try/Catch Path Resolution)
